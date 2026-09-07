@@ -111,6 +111,29 @@ def test_valid_socket_schema() -> None:
     PLATFORM_SCHEMA(valid_schema)
 
 
+def test_valid_ir_control_schema() -> None:
+    """Test schema with IR control disabled, as on the 24180."""
+    valid_schema = {
+        "platform": "blackbird",
+        "port": "/dev/ttyUSB0",
+        "ir_control": False,
+        "zones": {1: {"name": "a"}},
+        "sources": {1: {"name": "a"}},
+    }
+    assert PLATFORM_SCHEMA(valid_schema)["ir_control"] is False
+
+
+def test_ir_control_defaults_to_true() -> None:
+    """Test that IR control stays enabled when unspecified."""
+    schema = {
+        "platform": "blackbird",
+        "port": "/dev/ttyUSB0",
+        "zones": {1: {"name": "a"}},
+        "sources": {1: {"name": "a"}},
+    }
+    assert PLATFORM_SCHEMA(schema)["ir_control"] is True
+
+
 def test_invalid_schemas() -> None:
     """Test invalid schemas."""
     schemas = (
@@ -164,6 +187,15 @@ def test_invalid_schemas() -> None:
             "zones": {1: {"name": "a"}},
             "sources": {1: {}},
         },
+        # Non-boolean IR control
+        {
+            "platform": "blackbird",
+            "port": "/dev/ttyUSB0",
+            "name": "Name",
+            "ir_control": "nonsense",
+            "zones": {1: {"name": "a"}},
+            "sources": {1: {"name": "b"}},
+        },
     )
     for value in schemas:
         with pytest.raises(vol.MultipleInvalid):
@@ -212,6 +244,39 @@ def media_player_entity(
     media_player.platform = MockEntityPlatform(hass)
     media_player.entity_id = "media_player.zone_3"
     return media_player
+
+
+@pytest.mark.parametrize(
+    ("config_extra", "expected_ir_control"),
+    [({}, True), ({"ir_control": True}, True), ({"ir_control": False}, False)],
+)
+async def test_ir_control_passed_to_library(
+    hass: HomeAssistant,
+    mock_blackbird: MockBlackbird,
+    config_extra: dict[str, bool],
+    expected_ir_control: bool,
+) -> None:
+    """Test that IR control reaches pyblackbird, defaulting to enabled."""
+    with mock.patch(
+        "homeassistant.components.blackbird.media_player.get_blackbird",
+        return_value=mock_blackbird,
+    ) as mock_get_blackbird:
+        await async_setup_component(
+            hass,
+            "media_player",
+            {
+                "media_player": {
+                    "platform": "blackbird",
+                    "port": "/dev/ttyUSB0",
+                    "zones": {3: {"name": "Zone name"}},
+                    "sources": {1: {"name": "one"}},
+                    **config_extra,
+                }
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert mock_get_blackbird.call_args.kwargs["ir_control"] is expected_ir_control
 
 
 @pytest.mark.usefixtures("setup_blackbird")

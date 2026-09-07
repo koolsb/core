@@ -37,6 +37,7 @@ SOURCE_SCHEMA = vol.Schema({vol.Required(CONF_NAME): cv.string})
 
 CONF_ZONES = "zones"
 CONF_SOURCES = "sources"
+CONF_IR_CONTROL = "ir_control"
 
 DATA_BLACKBIRD = "blackbird"
 
@@ -61,6 +62,7 @@ PLATFORM_SCHEMA = vol.All(
             vol.Exclusive(CONF_HOST, CONF_TYPE): cv.string,
             vol.Required(CONF_ZONES): vol.Schema({ZONE_IDS: ZONE_SCHEMA}),
             vol.Required(CONF_SOURCES): vol.Schema({SOURCE_IDS: SOURCE_SCHEMA}),
+            vol.Optional(CONF_IR_CONTROL, default=True): cv.boolean,
         }
     ),
 )
@@ -78,11 +80,14 @@ def setup_platform(
 
     port = config.get(CONF_PORT)
     host = config.get(CONF_HOST)
+    # Models without IR routing, such as the 24180, use a different command to
+    # select a source and report a shorter zone status.
+    ir_control = config[CONF_IR_CONTROL]
 
     connection = None
     if port is not None:
         try:
-            blackbird = get_blackbird(port)
+            blackbird = get_blackbird(port, ir_control=ir_control)
             connection = port
         except SerialException:
             _LOGGER.error("Error connecting to the Blackbird controller")
@@ -90,7 +95,7 @@ def setup_platform(
 
     if host is not None:
         try:
-            blackbird = get_blackbird(host, False)
+            blackbird = get_blackbird(host, False, ir_control=ir_control)
             connection = host
         except TimeoutError:
             _LOGGER.error("Error connecting to the Blackbird controller")
